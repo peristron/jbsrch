@@ -6,37 +6,28 @@ import re
 
 # ---------- Password Protection ----------
 def check_password():
-    """Returns `True` if the user entered the correct password."""
     def password_entered():
         if st.session_state["password"] == st.secrets["APP_PASSWORD"]:
             st.session_state["password_correct"] = True
-            del st.session_state["password"]  # don't store password
+            del st.session_state["password"]
         else:
             st.session_state["password_correct"] = False
 
     if "password_correct" not in st.session_state:
-        # First run, show password input
-        st.text_input(
-            "Password", type="password", on_change=password_entered, key="password"
-        )
+        st.text_input("Password", type="password", on_change=password_entered, key="password")
         return False
     elif not st.session_state["password_correct"]:
-        # Wrong password
-        st.text_input(
-            "Password", type="password", on_change=password_entered, key="password"
-        )
+        st.text_input("Password", type="password", on_change=password_entered, key="password")
         st.error("😕 Password incorrect")
         return False
     else:
-        # Password correct
         return True
 
 if not check_password():
-    st.stop()  # Do not continue if not authenticated
+    st.stop()
 
 # ---------- LLM Client Factory ----------
 def get_llm_client(llm_choice):
-    """Return an OpenAI-compatible client for the chosen LLM."""
     try:
         if llm_choice == "OpenAI":
             return OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
@@ -57,18 +48,11 @@ def get_llm_client(llm_choice):
         st.error(f"Missing API key for {llm_choice}. Please check your secrets.")
         st.stop()
 
-# ---------- Job Scraper (Demo only – replace with official APIs) ----------
+# ---------- Job Scraper (Demo only) ----------
 def scrape_indeed_jobs(query, location="USA", max_jobs=5):
-    """
-    Basic scraper for Indeed. May break or be blocked.
-    For production, use official job APIs (Adzuna, etc.) or services like SerpAPI.
-    """
     base_url = "https://www.indeed.com/jobs"
     params = {"q": query, "l": location}
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
-    }
-
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
     try:
         response = requests.get(base_url, params=params, headers=headers, timeout=10)
         if response.status_code != 200:
@@ -79,7 +63,6 @@ def scrape_indeed_jobs(query, location="USA", max_jobs=5):
     soup = BeautifulSoup(response.text, "html.parser")
     job_cards = soup.find_all("div", class_="job_seen_beacon")[:max_jobs]
     jobs = []
-
     for card in job_cards:
         title_elem = card.find("h2", class_="jobTitle")
         title = title_elem.text.strip() if title_elem else "N/A"
@@ -89,13 +72,7 @@ def scrape_indeed_jobs(query, location="USA", max_jobs=5):
         description = desc_elem.text.strip() if desc_elem else "N/A"
         link_elem = card.find("a", class_="jcs-JobTitle")
         url = "https://www.indeed.com" + link_elem["href"] if link_elem else "N/A"
-
-        jobs.append({
-            "title": title,
-            "company": company,
-            "description": description,
-            "url": url
-        })
+        jobs.append({"title": title, "company": company, "description": description, "url": url})
     return jobs
 
 # ---------- LLM Scoring ----------
@@ -122,7 +99,7 @@ def score_job_fit(client, model, user_profile, job_description):
         st.warning(f"Scoring failed: {e}")
         return 0
 
-# ---------- Resume Summary Tailoring ----------
+# ---------- Resume Summary ----------
 def tailor_resume_summary(client, model, user_profile, job_description):
     prompt = f"""
     User profile: {user_profile}
@@ -149,20 +126,11 @@ st.set_page_config(page_title="JobOps Python POC", page_icon="💼")
 st.title("💼 JobOps Python POC: AI Job Scorer & Resume Tailorer")
 st.markdown("Prototype combining job scraping, AI scoring, and resume tailoring with your choice of LLM.")
 
-# LLM selection
 llm_choice = st.selectbox("Select LLM:", ["OpenAI", "xAI Grok", "DeepSeek"])
-
-model_map = {
-    "OpenAI": "gpt-3.5-turbo",
-    "xAI Grok": "grok-beta",
-    "DeepSeek": "deepseek-chat"
-}
+model_map = {"OpenAI": "gpt-3.5-turbo", "xAI Grok": "grok-beta", "DeepSeek": "deepseek-chat"}
 model = model_map[llm_choice]
-
-# Get client (will stop if key missing)
 client = get_llm_client(llm_choice)
 
-# User inputs
 user_profile = st.text_area("📄 Enter your resume/profile text (skills, experience, etc.):", height=200)
 job_query = st.text_input("🔍 Job search query (e.g., 'Python Developer'):")
 location = st.text_input("📍 Location (e.g., 'Remote' or 'New York'):", value="USA")
@@ -171,12 +139,11 @@ if st.button("🚀 Search & Score Jobs"):
     if not user_profile or not job_query:
         st.error("Please provide your profile and job query.")
     else:
-        with st.spinner("Scraping jobs (this may fail if Indeed blocks us)..."):
+        with st.spinner("Scraping jobs..."):
             jobs = scrape_indeed_jobs(job_query, location)
 
         if not jobs:
             st.warning("No jobs found or scraping failed. For a reliable demo, consider using a job API (e.g., Adzuna) instead of scraping.")
-            # Optional: add fallback mock jobs for demonstration
             if st.checkbox("Use mock job data for demo"):
                 jobs = [
                     {"title": "Python Developer", "company": "Tech Corp", "description": "Looking for a Python expert with Django experience.", "url": "#"},
@@ -191,7 +158,6 @@ if st.button("🚀 Search & Score Jobs"):
                 score = score_job_fit(client, model, user_profile, job["description"])
                 job["score"] = score
                 scored_jobs.append(job)
-
             scored_jobs.sort(key=lambda x: x["score"], reverse=True)
 
             st.subheader("📊 Scored Job Listings")
@@ -200,9 +166,6 @@ if st.button("🚀 Search & Score Jobs"):
                     st.write(job["description"])
                     if job["url"] != "N/A" and job["url"] != "#":
                         st.markdown(f"[View Job]({job['url']})")
-                    else:
-                        st.write("*(No URL available)*")
-                    
                     if st.button(f"✨ Generate Tailored Summary", key=job['title']+job['company']):
                         summary = tailor_resume_summary(client, model, user_profile, job["description"])
                         st.subheader("Tailored Resume Summary")
