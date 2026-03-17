@@ -683,15 +683,66 @@ with st.expander("📖 How to Use This Application", expanded=False):
 
     ---
 
-    ### What You Need
+    ### How to Copy Job Postings
 
-    | Requirement | Required? | Notes |
-    |---|---|---|
-    | **LLM API key** (OpenAI, xAI, or DeepSeek) | ✅ Yes | At least one — powers all AI features |
-    | **Adzuna API keys** | ❌ Optional | Only needed for the API Search tab. Free at [developer.adzuna.com](https://developer.adzuna.com) |
+    The **📋 Paste Job** tab works with any job posting from any site.
+    Here's how to grab the info you need:
 
-    **The app works perfectly without Adzuna** — just use the Paste Job tab to
-    manually score jobs from any source (LinkedIn, Indeed, company sites, etc.)
+    #### LinkedIn
+    1. Open the job listing on LinkedIn
+    2. You'll see the job title and company name at the top — type these into the app
+    3. Click **"Show more"** (or **"See more"**) to expand the full job description
+    4. Select all the description text (from "About the role" or similar down to the bottom)
+    5. **Ctrl+C** (or **Cmd+C** on Mac) to copy
+    6. Paste into the **"Full Job Description"** box in the app
+    7. *(Optional)* Copy the URL from your browser's address bar into the **"Job URL"** field
+
+    > **💡 LinkedIn tip:** The URL in your browser bar works fine.
+    > It usually looks like `linkedin.com/jobs/view/1234567890`
+
+    #### Indeed
+    1. Open the full job listing (click the job title from search results)
+    2. The title, company, and location are at the top — type these into the app
+    3. Scroll to the **"Full Job Description"** section
+    4. Select all the text from the description area
+    5. Copy and paste into the app
+    6. *(Optional)* Copy the URL from your browser bar
+
+    > **💡 Indeed tip:** Some listings have a "Show full description" link — click it first
+    > to reveal all the content before copying.
+
+    #### Glassdoor
+    1. Open the job listing
+    2. Click **"Show more"** if the description is truncated
+    3. Copy the full description text
+    4. Note: Glassdoor may require you to be logged in to see full descriptions
+
+    #### Company Career Pages
+    1. These are often the best source — full descriptions with no truncation
+    2. Open the listing, select all the job description text, copy and paste
+    3. Save the URL — it's the most direct link to the posting
+
+    #### General Tips for Any Site
+    - **Copy as much as possible** — the AI does better with the full description
+      including requirements, qualifications, responsibilities, and benefits
+    - **Don't worry about formatting** — bullet points, weird spacing, and
+      extra characters are all fine. The AI handles messy text well
+    - **Include "nice to have" sections** — these affect your score and help
+      the AI tailor your resume more accurately
+    - **Skip the boilerplate** — you can leave out equal opportunity statements,
+      company mission paragraphs, etc., but it won't hurt if you include them
+
+    ---
+
+    ### What to Paste Where
+
+    | App Field | What to Put |
+    |---|---|
+    | **Job Title** | Exact title from the listing (e.g., "Senior Python Developer") |
+    | **Company** | Company name |
+    | **Location** | City, state, "Remote", "Hybrid", etc. — whatever the listing says |
+    | **Job URL** | *(Optional)* The URL from your browser — useful for tracking |
+    | **Full Job Description** | Everything else: responsibilities, requirements, qualifications, skills, benefits |
 
     ---
 
@@ -700,7 +751,7 @@ with st.expander("📖 How to Use This Application", expanded=False):
     | Tab | What to do |
     |---|---|
     | **📋 Paste Job** | Found a job anywhere? Paste title + description → get instant AI fit score → save it |
-    | **🔍 API Search** | *(Optional — requires Adzuna)* Search by keywords + country → auto-score all results |
+    | **🔍 API Search** | *(Optional — requires free Adzuna keys)* Search by keywords + country → auto-score results |
     | **📊 Search Results** | Review scored API search results → save the good ones |
     | **💾 Saved Jobs** | Your persistent job tracker — update status, add notes, view tailored content |
     | **✂️ Tailor Resume** | Pick any saved job → generate tailored summary + bullet points → edit → save |
@@ -719,13 +770,27 @@ with st.expander("📖 How to Use This Application", expanded=False):
 
     ### Typical Workflow
 
-    1. Find jobs on LinkedIn, Indeed, Glassdoor, company career pages, etc.
-    2. Copy the full job description
-    3. Paste into the **📋 Paste Job** tab → score it
-    4. If the score is good, save it to **💾 Saved Jobs**
-    5. Go to **✂️ Tailor Resume** → generate a custom summary and bullet points
-    6. Use the tailored content in your actual application
-    7. Update the status in **💾 Saved Jobs** as you progress (Applied → Interview → Offer)
+    1. Browse jobs on LinkedIn, Indeed, Glassdoor, company career pages, etc.
+    2. When you find an interesting listing, copy the full job description
+    3. Paste into the **📋 Paste Job** tab → fill in title, company → score it
+    4. If the score is 🟢 or 🟡, save it to **💾 Saved Jobs**
+    5. Go to **✂️ Tailor Resume** → select that job → generate a custom summary and bullet points
+    6. Copy the tailored content into your actual resume/application
+    7. Submit your application on the original site
+    8. Come back and update the status in **💾 Saved Jobs** (New → Applied)
+    9. Keep updating as you hear back (Applied → Interview → Offer / Rejected)
+
+    ---
+
+    ### What You Need
+
+    | Requirement | Required? | Notes |
+    |---|---|---|
+    | **LLM API key** (OpenAI, xAI, or DeepSeek) | ✅ Yes | At least one — powers all AI features |
+    | **Adzuna API keys** | ❌ Optional | Only for API Search tab. Free at [developer.adzuna.com](https://developer.adzuna.com) |
+
+    **The app works perfectly without Adzuna** — the Paste Job tab is the
+    primary workflow and only needs an LLM key.
 
     ---
 
@@ -743,11 +808,14 @@ with st.expander("📖 How to Use This Application", expanded=False):
 
     ### Tips
 
-    - **Better resume = better scores.** Include specific skills, tools, years of experience, and achievements
-    - **Try different LLM models** — scores can vary; compare if you're unsure
-    - **Tailor before applying** — even a small customization can make a big difference
+    - **Better resume = better scores.** Include specific skills, tools, years
+      of experience, and quantified achievements
+    - **Paste the FULL description** — partial descriptions give less accurate scores
+    - **Try different LLM models** — scores can vary between providers; compare if unsure
+    - **Tailor before applying** — even small customization makes a real difference
+    - **Score is a guide, not gospel** — use it to prioritize, but always read the
+      job description yourself
     - **Track everything** — update statuses so you never lose track of applications
-    - **Score is a guide, not gospel** — use it to prioritize, but always read the job description yourself
 
     ---
 
@@ -757,9 +825,10 @@ with st.expander("📖 How to Use This Application", expanded=False):
     |---|---|
     | "API key not found" | Add your key to `.streamlit/secrets.toml` |
     | Adzuna search not working | It's optional — use Paste Job tab instead, or get free keys at developer.adzuna.com |
-    | PDF upload shows no text | Your PDF may be image-based (scanned) — copy-paste the text manually |
+    | PDF upload shows no text | PDF may be image-based (scanned) — copy-paste the text manually |
     | .doc file not supported | Re-save as .docx in Word (File → Save As → Word Document .docx) |
     | Scores seem off | Try a different model, or add more detail to your resume |
+    | LinkedIn description looks incomplete | Click "Show more" / "See more" on LinkedIn before copying |
     """)
 
 
