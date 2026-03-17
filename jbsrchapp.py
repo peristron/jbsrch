@@ -67,20 +67,23 @@ STATUS_OPTIONS = [
 
 
 # ╔══════════════════════════════════════════════════════════════╗
-# ║  FILE PARSING (TXT, PDF, DOCX)                              ║
+# ║  FILE PARSING (TXT, PDF, DOCX, DOC)                         ║
 # ╚══════════════════════════════════════════════════════════════╝
 
 def parse_uploaded_file(uploaded_file) -> tuple[str, str | None]:
     """
     Parse an uploaded file and return (text_content, error_or_None).
     Supports .txt, .pdf, and .docx formats.
+    Detects .doc and .odt with helpful conversion instructions.
     """
     filename = uploaded_file.name.lower()
 
     try:
+        # ── Plain text ──
         if filename.endswith(".txt"):
             return uploaded_file.read().decode("utf-8"), None
 
+        # ── PDF ──
         elif filename.endswith(".pdf"):
             import pdfplumber
 
@@ -92,10 +95,17 @@ def parse_uploaded_file(uploaded_file) -> tuple[str, str | None]:
                         text_parts.append(page_text)
 
             if not text_parts:
-                return "", "PDF appears to be empty or image-based (no extractable text)."
+                return "", (
+                    "Could not extract text from this PDF. It may be "
+                    "image-based (scanned). Try:\n"
+                    "1. Open the PDF and Select All → Copy → paste into "
+                    "the text box above, OR\n"
+                    "2. Use a .docx or .txt version instead"
+                )
 
             return "\n\n".join(text_parts), None
 
+        # ── Word .docx (2007+) ──
         elif filename.endswith(".docx"):
             from docx import Document
 
@@ -107,14 +117,44 @@ def parse_uploaded_file(uploaded_file) -> tuple[str, str | None]:
 
             return "\n\n".join(paragraphs), None
 
+        # ── Word .doc (97-2003) — not supported directly ──
+        elif filename.endswith(".doc"):
+            return "", (
+                "**.doc files (Word 97-2003 format) are not supported.** "
+                "The newer **.docx** format is required.\n\n"
+                "**Easy fixes:**\n"
+                "1. **Re-save as .docx**: Open the file in Word → "
+                "File → Save As → choose \"Word Document (.docx)\"\n"
+                "2. **Re-save as .pdf**: Open in Word → File → "
+                "Save As → choose \"PDF\"\n"
+                "3. **Copy & paste**: Open the file → Select All → "
+                "Copy → paste into the text box above\n\n"
+                "*Google Docs can also open .doc files and export as .docx*"
+            )
+
+        # ── LibreOffice .odt ──
+        elif filename.endswith(".odt"):
+            return "", (
+                "**.odt files (LibreOffice) are not supported directly.**\n\n"
+                "**Easy fixes:**\n"
+                "1. Open in LibreOffice → File → Save As → "
+                "choose \"Word (.docx)\" or \"PDF\"\n"
+                "2. Copy & paste the text into the text box above"
+            )
+
+        # ── Anything else ──
         else:
-            return "", f"Unsupported file type: {filename}. Use .txt, .pdf, or .docx"
+            ext = filename.rsplit(".", 1)[-1] if "." in filename else "unknown"
+            return "", (
+                f"**.{ext}** files are not supported. "
+                f"Please use **.txt**, **.pdf**, or **.docx**"
+            )
 
     except ImportError as e:
         missing = "pdfplumber" if "pdfplumber" in str(e) else "python-docx"
         return "", (
-            f"Missing library: {missing}. "
-            f"Install it with: pip install {missing}"
+            f"Missing library: **{missing}**. "
+            f"Install it with: `pip install {missing}`"
         )
     except Exception as e:
         return "", f"Error reading file: {e}"
@@ -285,7 +325,7 @@ def db_job_exists(title: str, company: str, url: str) -> bool:
 
 
 # ╔══════════════════════════════════════════════════════════════╗
-# ║  JOB SEARCH (Adzuna API)                                    ║
+# ║  JOB SEARCH (Adzuna API — optional)                          ║
 # ╚══════════════════════════════════════════════════════════════╝
 
 def search_adzuna(
@@ -302,9 +342,12 @@ def search_adzuna(
 
     if not app_id or not app_key:
         return [], (
-            "Adzuna not configured. Get free credentials at "
-            "https://developer.adzuna.com and add ADZUNA_APP_ID / "
-            "ADZUNA_APP_KEY to .streamlit/secrets.toml"
+            "Adzuna not configured. This is **optional** — you can use the "
+            "**📋 Paste Job** tab without it.\n\n"
+            "To enable search: get free credentials at "
+            "[developer.adzuna.com](https://developer.adzuna.com) "
+            "and add `ADZUNA_APP_ID` / `ADZUNA_APP_KEY` to "
+            "`.streamlit/secrets.toml`"
         )
 
     cc = COUNTRY_CODES.get(country.lower().strip(), country.lower().strip()[:2])
@@ -575,7 +618,7 @@ with st.sidebar:
     if adzuna_ok:
         st.success("✅ Adzuna keys found")
     else:
-        st.warning("⚠️ Adzuna not configured (Search tab won't work)")
+        st.caption("ℹ️ Adzuna not configured (optional — for API Search tab)")
 
     st.divider()
 
@@ -593,9 +636,9 @@ with st.sidebar:
 
     uploaded = st.file_uploader(
         "Or upload a file",
-        type=["txt", "pdf", "docx"],
+        type=["txt", "pdf", "docx", "doc", "odt"],
         key="resume_upload",
-        help="Supported formats: .txt, .pdf, .docx",
+        help="Supported: .txt, .pdf, .docx  •  .doc and .odt will show conversion instructions",
     )
     if uploaded:
         text, err = parse_uploaded_file(uploaded)
@@ -603,7 +646,7 @@ with st.sidebar:
             st.error(err)
         elif text:
             st.session_state.resume = text
-            st.success(f"✅ Loaded from {uploaded.name}")
+            st.success(f"✅ Loaded {len(text.split())} words from {uploaded.name}")
             st.rerun()
 
     if st.session_state.resume:
@@ -611,6 +654,12 @@ with st.sidebar:
         st.caption(f"📝 {word_count} words loaded")
     else:
         st.caption("⚠️ No resume loaded — paste or upload above")
+
+    # Clear resume button
+    if st.session_state.resume:
+        if st.button("🗑️ Clear Resume", key="btn_clear_resume"):
+            st.session_state.resume = ""
+            st.rerun()
 
 
 # ╔══════════════════════════════════════════════════════════════╗
@@ -626,17 +675,23 @@ st.caption(
 # ── Collapsible How-To Guide ──
 with st.expander("📖 How to Use This Application", expanded=False):
     st.markdown("""
-    ### Quick Start
+    ### Quick Start (3 steps)
 
-    **1. Load Your Resume** (Sidebar → left panel)
-    - Paste your resume text into the text box, **OR**
-    - Upload a file (.txt, .pdf, or .docx)
-    - Your resume stays loaded across all tabs during your session
+    1. **Load your resume** → Sidebar (left panel): paste text or upload a file (.txt, .pdf, .docx)
+    2. **Score a job** → Use the **📋 Paste Job** tab: paste any job description and get an AI fit score
+    3. **Tailor your resume** → Save scored jobs, then use the **✂️ Tailor** tab to generate custom content
 
-    **2. Choose Your AI** (Sidebar → top)
-    - Pick a provider: OpenAI, xAI (Grok), or DeepSeek
-    - Select a model from the dropdown
-    - Make sure the corresponding API key shows ✅
+    ---
+
+    ### What You Need
+
+    | Requirement | Required? | Notes |
+    |---|---|---|
+    | **LLM API key** (OpenAI, xAI, or DeepSeek) | ✅ Yes | At least one — powers all AI features |
+    | **Adzuna API keys** | ❌ Optional | Only needed for the API Search tab. Free at [developer.adzuna.com](https://developer.adzuna.com) |
+
+    **The app works perfectly without Adzuna** — just use the Paste Job tab to
+    manually score jobs from any source (LinkedIn, Indeed, company sites, etc.)
 
     ---
 
@@ -644,11 +699,11 @@ with st.expander("📖 How to Use This Application", expanded=False):
 
     | Tab | What to do |
     |---|---|
-    | **🔍 API Search** | Enter job keywords + country → search Adzuna → AI scores every result against your resume |
-    | **📋 Paste Job** | Found a job on LinkedIn, Indeed, etc.? Paste the title + description here → get an instant fit score |
-    | **📊 Search Results** | Review your scored search results → save the good ones to your database |
-    | **💾 Saved Jobs** | Your persistent job tracker — update application status (New → Applied → Interview → Offer/Rejected), add notes |
-    | **✂️ Tailor Resume** | Pick any saved job → generate a tailored professional summary + bullet points → edit → save |
+    | **📋 Paste Job** | Found a job anywhere? Paste title + description → get instant AI fit score → save it |
+    | **🔍 API Search** | *(Optional — requires Adzuna)* Search by keywords + country → auto-score all results |
+    | **📊 Search Results** | Review scored API search results → save the good ones |
+    | **💾 Saved Jobs** | Your persistent job tracker — update status, add notes, view tailored content |
+    | **✂️ Tailor Resume** | Pick any saved job → generate tailored summary + bullet points → edit → save |
 
     ---
 
@@ -662,12 +717,37 @@ with st.expander("📖 How to Use This Application", expanded=False):
 
     ---
 
+    ### Typical Workflow
+
+    1. Find jobs on LinkedIn, Indeed, Glassdoor, company career pages, etc.
+    2. Copy the full job description
+    3. Paste into the **📋 Paste Job** tab → score it
+    4. If the score is good, save it to **💾 Saved Jobs**
+    5. Go to **✂️ Tailor Resume** → generate a custom summary and bullet points
+    6. Use the tailored content in your actual application
+    7. Update the status in **💾 Saved Jobs** as you progress (Applied → Interview → Offer)
+
+    ---
+
+    ### File Upload Support
+
+    | Format | Status |
+    |---|---|
+    | **.txt** | ✅ Fully supported |
+    | **.pdf** | ✅ Supported (text-based PDFs — scanned/image PDFs may not extract) |
+    | **.docx** | ✅ Supported (Word 2007+) |
+    | **.doc** | ⚠️ Not supported — re-save as .docx or .pdf first |
+    | **.odt** | ⚠️ Not supported — re-save as .docx or .pdf first |
+
+    ---
+
     ### Tips
+
     - **Better resume = better scores.** Include specific skills, tools, years of experience, and achievements
-    - **Use Paste Job tab** for jobs from sites like LinkedIn or Indeed — just copy the full job description
-    - **Tailor before applying** — use the Tailor tab to generate a custom summary and bullet points for each job
-    - **Track everything** — update statuses in Saved Jobs so you never lose track of where you applied
-    - **Try different models** — some score differently; compare if you're unsure about a result
+    - **Try different LLM models** — scores can vary; compare if you're unsure
+    - **Tailor before applying** — even a small customization can make a big difference
+    - **Track everything** — update statuses so you never lose track of applications
+    - **Score is a guide, not gospel** — use it to prioritize, but always read the job description yourself
 
     ---
 
@@ -676,19 +756,20 @@ with st.expander("📖 How to Use This Application", expanded=False):
     | Problem | Fix |
     |---|---|
     | "API key not found" | Add your key to `.streamlit/secrets.toml` |
-    | Search returns no results | Try broader keywords or a different country code |
-    | PDF upload shows no text | Your PDF may be image-based (scanned) — paste the text manually instead |
+    | Adzuna search not working | It's optional — use Paste Job tab instead, or get free keys at developer.adzuna.com |
+    | PDF upload shows no text | Your PDF may be image-based (scanned) — copy-paste the text manually |
+    | .doc file not supported | Re-save as .docx in Word (File → Save As → Word Document .docx) |
     | Scores seem off | Try a different model, or add more detail to your resume |
     """)
 
 
 # ╔══════════════════════════════════════════════════════════════╗
-# ║  TABS                                                        ║
+# ║  TABS — Paste Job is first (works without Adzuna)            ║
 # ╚══════════════════════════════════════════════════════════════╝
 
-tab_search, tab_manual, tab_results, tab_saved, tab_tailor = st.tabs([
-    "🔍 API Search",
+tab_manual, tab_search, tab_results, tab_saved, tab_tailor = st.tabs([
     "📋 Paste Job",
+    "🔍 API Search (Optional)",
     "📊 Search Results",
     "💾 Saved Jobs",
     "✂️ Tailor Resume",
@@ -696,13 +777,76 @@ tab_search, tab_manual, tab_results, tab_saved, tab_tailor = st.tabs([
 
 
 # ──────────────────────────────────────────
-# TAB 1: Adzuna API Search
+# TAB 1: Manual Job Paste (Primary workflow)
+# ──────────────────────────────────────────
+with tab_manual:
+    st.header("📋 Score a Job")
+    st.caption(
+        "Copy a job description from any site (LinkedIn, Indeed, Glassdoor, "
+        "company career pages, etc.) and score it against your resume."
+    )
+
+    m_title = st.text_input("Job Title", key="manual_title")
+    mc1, mc2 = st.columns(2)
+    with mc1:
+        m_company = st.text_input("Company", key="manual_company")
+    with mc2:
+        m_location = st.text_input("Location (optional)", key="manual_location")
+    m_url = st.text_input("Job URL (optional)", key="manual_url")
+    m_desc = st.text_area(
+        "Full Job Description",
+        height=250,
+        key="manual_desc",
+        placeholder="Paste the full job description here…",
+    )
+
+    if st.button("📊 Score This Job", type="primary", key="btn_manual_score"):
+        if not m_title or not m_desc:
+            st.warning("Title and description are required.")
+        elif not st.session_state.resume:
+            st.warning("Paste your resume in the sidebar first.")
+        else:
+            client = safe_get_client(provider)
+            with st.spinner("Scoring…"):
+                s, r = ai_score_job(
+                    client, model, st.session_state.resume, m_desc
+                )
+            st.session_state.manual_score = {
+                "score": s,
+                "reason": r,
+                "job": parse_manual_job(m_title, m_company, m_desc, m_url, m_location),
+            }
+
+    # Display manual score result (persists across reruns)
+    if st.session_state.manual_score:
+        ms = st.session_state.manual_score
+        s = ms["score"]
+        dot = "🟢" if s >= 70 else ("🟡" if s >= 40 else "🔴")
+
+        st.divider()
+        st.markdown(f"### {dot} Score: {s}/100")
+        st.write(f"**Reasoning:** {ms['reason']}")
+
+        job = ms["job"]
+        if db_job_exists(job["title"], job["company"], job["url"]):
+            st.info("✅ This job is already saved.")
+        else:
+            if st.button("💾 Save to My Jobs", key="btn_save_manual"):
+                jid = db_save_job(job, ms["score"], ms["reason"])
+                st.success(f"Saved! (ID: {jid})")
+                st.session_state.manual_score = None
+                st.rerun()
+
+
+# ──────────────────────────────────────────
+# TAB 2: Adzuna API Search (Optional)
 # ──────────────────────────────────────────
 with tab_search:
     st.header("🔍 Search Jobs via Adzuna")
     st.caption(
-        "Free API — [get credentials here](https://developer.adzuna.com) "
-        "(250 requests/month)"
+        "**Optional** — requires free API keys from "
+        "[developer.adzuna.com](https://developer.adzuna.com) "
+        "(250 requests/month). You can skip this and use the Paste Job tab instead."
     )
 
     col1, col2, col3 = st.columns([3, 2, 1])
@@ -766,72 +910,16 @@ with tab_search:
 
 
 # ──────────────────────────────────────────
-# TAB 2: Manual Job Paste
-# ──────────────────────────────────────────
-with tab_manual:
-    st.header("📋 Score a Single Job (Paste)")
-    st.caption("Copy a job description from any site and score it here.")
-
-    m_title = st.text_input("Job Title", key="manual_title")
-    mc1, mc2 = st.columns(2)
-    with mc1:
-        m_company = st.text_input("Company", key="manual_company")
-    with mc2:
-        m_location = st.text_input("Location (optional)", key="manual_location")
-    m_url = st.text_input("Job URL (optional)", key="manual_url")
-    m_desc = st.text_area(
-        "Full Job Description",
-        height=250,
-        key="manual_desc",
-        placeholder="Paste the full job description here…",
-    )
-
-    if st.button("📊 Score This Job", type="primary", key="btn_manual_score"):
-        if not m_title or not m_desc:
-            st.warning("Title and description are required.")
-        elif not st.session_state.resume:
-            st.warning("Paste your resume in the sidebar first.")
-        else:
-            client = safe_get_client(provider)
-            with st.spinner("Scoring…"):
-                s, r = ai_score_job(
-                    client, model, st.session_state.resume, m_desc
-                )
-            st.session_state.manual_score = {
-                "score": s,
-                "reason": r,
-                "job": parse_manual_job(m_title, m_company, m_desc, m_url, m_location),
-            }
-
-    # Display manual score result (persists across reruns)
-    if st.session_state.manual_score:
-        ms = st.session_state.manual_score
-        s = ms["score"]
-        dot = "🟢" if s >= 70 else ("🟡" if s >= 40 else "🔴")
-
-        st.divider()
-        st.markdown(f"### {dot} Score: {s}/100")
-        st.write(f"**Reasoning:** {ms['reason']}")
-
-        job = ms["job"]
-        if db_job_exists(job["title"], job["company"], job["url"]):
-            st.info("✅ This job is already saved.")
-        else:
-            if st.button("💾 Save to My Jobs", key="btn_save_manual"):
-                jid = db_save_job(job, ms["score"], ms["reason"])
-                st.success(f"Saved! (ID: {jid})")
-                st.session_state.manual_score = None
-                st.rerun()
-
-
-# ──────────────────────────────────────────
 # TAB 3: Search Results
 # ──────────────────────────────────────────
 with tab_results:
     st.header("📊 Search Results")
 
     if not st.session_state.search_results:
-        st.info("No search results yet. Use the **API Search** tab to find jobs.")
+        st.info(
+            "No search results yet. Use the **🔍 API Search** tab to find jobs, "
+            "or use **📋 Paste Job** to score individual listings."
+        )
     else:
         results = st.session_state.search_results
         st.caption(f"{len(results)} jobs scored")
@@ -897,7 +985,7 @@ with tab_saved:
 
     if not all_jobs:
         st.info(
-            "No saved jobs yet. Search or paste jobs, then save the ones you like."
+            "No saved jobs yet. Use **📋 Paste Job** to score and save jobs."
         )
     else:
         # Summary metrics
@@ -1018,7 +1106,7 @@ with tab_tailor:
     all_jobs_tailor = db_get_all_jobs()
     if not all_jobs_tailor:
         st.info(
-            "Save some jobs first (from Search Results or Paste tabs), "
+            "Save some jobs first (from **📋 Paste Job** or **📊 Search Results**), "
             "then come back here."
         )
         st.stop()
