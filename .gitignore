@@ -1,4 +1,5 @@
 .streamlit/secrets.toml
-*.pyc
+jobops.db
 __pycache__/
+*.pyc
 .env
