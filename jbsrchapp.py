@@ -1,5 +1,6 @@
 """
-JobOps — AI-powered job search scoring and resume tailoring.
+JobOps — AI-powered job search scoring, resume tailoring, cover letters,
+skills analysis, and interview prep.
 Single-file version. Run with: streamlit run app.py
 """
 
@@ -418,7 +419,7 @@ def parse_manual_job(
 
 
 # ╔══════════════════════════════════════════════════════════════╗
-# ║  AI OPERATIONS (Scoring & Tailoring)                         ║
+# ║  AI OPERATIONS (Scoring, Tailoring, Cover Letters, etc.)     ║
 # ╚══════════════════════════════════════════════════════════════╝
 
 def ai_score_job(
@@ -532,6 +533,178 @@ experience for this specific job. Follow these rules:
         return f"Error generating bullets: {e}"
 
 
+def ai_generate_cover_letter(
+    client: OpenAI,
+    model: str,
+    resume: str,
+    job_desc: str,
+    company: str,
+    title: str,
+    tone: str = "Professional",
+) -> str:
+    """Generate a tailored cover letter."""
+    prompt = f"""You are an expert career coach and cover letter writer.
+
+CANDIDATE PROFILE:
+{resume}
+
+TARGET JOB: {title} at {company}
+
+JOB DESCRIPTION:
+{job_desc}
+
+TONE: {tone}
+
+Write a compelling cover letter for this candidate applying to this specific job.
+Follow these rules:
+- Opening paragraph: Hook — why you're excited about THIS role at THIS company
+- Middle paragraph(s): 2-3 specific examples from your experience that match
+  key job requirements. Quantify achievements where possible
+- Closing paragraph: Enthusiasm + call to action (interview request)
+- Keep it to 300-400 words
+- Match the requested tone: {tone}
+- Do NOT fabricate experience the candidate doesn't have
+- Do NOT include placeholder brackets like [Your Name] — write it as ready-to-send
+- Do NOT include addresses or date headers — just the letter body
+
+Return only the cover letter text."""
+
+    try:
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=600,
+            temperature=0.7,
+        )
+        return resp.choices[0].message.content.strip()
+    except Exception as e:
+        return f"Error generating cover letter: {e}"
+
+
+def ai_skills_analysis(
+    client: OpenAI,
+    model: str,
+    resume: str,
+    job_desc: str,
+) -> str:
+    """Analyze skills match between candidate and job."""
+    prompt = f"""You are a career advisor performing a skills gap analysis.
+
+CANDIDATE PROFILE:
+{resume}
+
+JOB DESCRIPTION:
+{job_desc}
+
+Analyze the match between this candidate's skills/experience and the job requirements.
+Organize your response in exactly this format using markdown:
+
+### ✅ Strong Matches
+List skills/experience the candidate clearly has that the job requires.
+For each, briefly note the evidence from their profile.
+
+### ⚠️ Partial Matches
+List skills where the candidate has related but not exact experience.
+For each, suggest how to frame their existing experience to address this.
+
+### ❌ Gaps
+List skills/requirements the candidate appears to lack.
+For each, suggest ONE of these strategies:
+- How to address it in a cover letter (show willingness to learn)
+- Related experience that partially compensates
+- Quick ways to build this skill (courses, projects, certifications)
+
+### 💡 Hidden Strengths
+List 2-3 things from the candidate's profile that could be valuable for this
+role but aren't explicitly listed in the job requirements. Suggest how to
+highlight these as differentiators.
+
+Be specific and actionable. Reference actual skills and experience from the profile."""
+
+    try:
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=800,
+            temperature=0.4,
+        )
+        return resp.choices[0].message.content.strip()
+    except Exception as e:
+        return f"Error analyzing skills: {e}"
+
+
+def ai_interview_prep(
+    client: OpenAI,
+    model: str,
+    resume: str,
+    job_desc: str,
+    title: str,
+    company: str,
+) -> str:
+    """Generate interview preparation materials."""
+    prompt = f"""You are an expert interview coach preparing a candidate for a job interview.
+
+CANDIDATE PROFILE:
+{resume}
+
+JOB: {title} at {company}
+
+JOB DESCRIPTION:
+{job_desc}
+
+Generate comprehensive interview preparation materials in this exact format
+using markdown:
+
+### 🎯 Key Themes This Interview Will Focus On
+List 3-5 major themes/areas the interviewer will likely focus on, based on
+the job description.
+
+### ❓ Likely Interview Questions
+
+**Behavioral Questions:**
+List 4-5 behavioral questions (STAR format) they're likely to ask.
+For each question, provide a brief suggested talking point from the
+candidate's actual experience.
+
+**Technical/Role-Specific Questions:**
+List 4-5 technical or role-specific questions based on the job requirements.
+For each, suggest how to approach the answer using the candidate's background.
+
+**Questions About Fit & Motivation:**
+List 3 questions about why this role/company.
+For each, suggest an authentic angle based on the candidate's profile.
+
+### 🗣️ Your STAR Stories
+Suggest 3 specific stories from the candidate's experience formatted as:
+- **Situation:** (brief context)
+- **Task:** (what was needed)
+- **Action:** (what the candidate did)
+- **Result:** (outcome — quantify if possible)
+
+These should be stories that map to the key requirements of THIS job.
+
+### ❓ Questions to Ask the Interviewer
+Suggest 5 thoughtful questions the candidate should ask, tailored to this
+specific role and company. Avoid generic questions — make them show insight.
+
+### 💡 Preparation Tips
+3-4 specific things the candidate should do before the interview
+(research, practice, prepare examples, etc.)
+
+Be specific. Use actual details from the candidate's profile and the job description."""
+
+    try:
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=1500,
+            temperature=0.5,
+        )
+        return resp.choices[0].message.content.strip()
+    except Exception as e:
+        return f"Error generating interview prep: {e}"
+
+
 # ╔══════════════════════════════════════════════════════════════╗
 # ║  PASSWORD PROTECTION                                         ║
 # ╚══════════════════════════════════════════════════════════════╝
@@ -588,6 +761,8 @@ if "search_results" not in st.session_state:
     st.session_state.search_results = []
 if "manual_score" not in st.session_state:
     st.session_state.manual_score = None
+if "last_uploaded_file" not in st.session_state:
+    st.session_state.last_uploaded_file = None
 
 
 # ╔══════════════════════════════════════════════════════════════╗
@@ -668,6 +843,7 @@ with st.sidebar:
     if st.session_state.resume:
         if st.button("🗑️ Clear Resume", key="btn_clear_resume"):
             st.session_state.resume = ""
+            st.session_state.last_uploaded_file = None
             st.rerun()
 
 
@@ -688,7 +864,7 @@ with st.expander("📖 How to Use This Application", expanded=False):
 
     1. **Load your resume** → Sidebar (left panel): paste text or upload a file (.txt, .pdf, .docx)
     2. **Score a job** → Use the **📋 Paste Job** tab: paste any job description and get an AI fit score
-    3. **Tailor your resume** → Save scored jobs, then use the **✂️ Tailor** tab to generate custom content
+    3. **Tailor your application** → Save scored jobs, then use the **✂️ Tailor** tab to generate custom content
 
     ---
 
@@ -763,7 +939,18 @@ with st.expander("📖 How to Use This Application", expanded=False):
     | **🔍 API Search** | *(Optional — requires free Adzuna keys)* Search by keywords + country → auto-score results |
     | **📊 Search Results** | Review scored API search results → save the good ones |
     | **💾 Saved Jobs** | Your persistent job tracker — update status, add notes, view tailored content |
-    | **✂️ Tailor Resume** | Pick any saved job → generate tailored summary + bullet points → edit → save |
+    | **✂️ Tailor** | Pick any saved job → generate resume content, cover letter, skills analysis, interview prep |
+
+    ---
+
+    ### Application Materials (✂️ Tailor Tab)
+
+    | Sub-tab | What it generates |
+    |---|---|
+    | **📝 Resume Tailoring** | Tailored professional summary + bullet points for your resume |
+    | **✉️ Cover Letter** | Full cover letter with selectable tone (Professional, Conversational, etc.) |
+    | **🔍 Skills Analysis** | Match/gap analysis: what you have, what's missing, how to address gaps |
+    | **🎤 Interview Prep** | Likely questions, STAR stories, talking points, questions to ask the interviewer |
 
     ---
 
@@ -783,7 +970,7 @@ with st.expander("📖 How to Use This Application", expanded=False):
     2. When you find an interesting listing, copy the full job description
     3. Paste into the **📋 Paste Job** tab → fill in title, company → score it
     4. If the score is 🟢 or 🟡, save it to **💾 Saved Jobs**
-    5. Go to **✂️ Tailor Resume** → select that job → generate a custom summary and bullet points
+    5. Go to **✂️ Tailor** → select that job → generate all your application materials
     6. Copy the tailored content into your actual resume/application
     7. Submit your application on the original site
     8. Come back and update the status in **💾 Saved Jobs** (New → Applied)
@@ -850,7 +1037,7 @@ tab_manual, tab_search, tab_results, tab_saved, tab_tailor = st.tabs([
     "🔍 API Search (Optional)",
     "📊 Search Results",
     "💾 Saved Jobs",
-    "✂️ Tailor Resume",
+    "✂️ Tailor",
 ])
 
 
@@ -1171,11 +1358,14 @@ with tab_saved:
 
 
 # ──────────────────────────────────────────
-# TAB 5: Tailor Resume
+# TAB 5: Tailor Application Materials
 # ──────────────────────────────────────────
 with tab_tailor:
-    st.header("✂️ Tailor Resume Content")
-    st.caption("Generate a tailored summary and bullet points for a saved job.")
+    st.header("✂️ Tailor Application Materials")
+    st.caption(
+        "Generate tailored resume content, cover letters, skills analysis, "
+        "and interview prep — all customized for a specific job."
+    )
 
     if not st.session_state.resume:
         st.warning("⚠️ Paste your resume in the sidebar first.")
@@ -1217,73 +1407,266 @@ with tab_tailor:
     with st.expander("📄 View full job description"):
         st.write(job["description"])
 
-    # Generate buttons
-    gen_col1, gen_col2 = st.columns(2)
+    # ── Sub-tabs for different material types ──
+    mat_summary, mat_cover, mat_skills, mat_interview = st.tabs([
+        "📝 Resume Tailoring",
+        "✉️ Cover Letter",
+        "🔍 Skills Analysis",
+        "🎤 Interview Prep",
+    ])
 
-    with gen_col1:
-        if st.button(
-            "✍️ Generate Summary", type="primary", key="btn_gen_summary"
-        ):
-            client = safe_get_client(provider)
-            with st.spinner("Generating tailored summary…"):
-                result = ai_tailor_summary(
-                    client, model, st.session_state.resume, job["description"]
-                )
-            st.session_state[f"gen_sum_{job_id}"] = result
+    # ──────────────────────────────────────
+    # SUB-TAB: Resume Tailoring
+    # ──────────────────────────────────────
+    with mat_summary:
+        st.subheader("📝 Resume Tailoring")
 
-    with gen_col2:
-        if st.button(
-            "📋 Generate Bullets", type="primary", key="btn_gen_bullets"
-        ):
-            client = safe_get_client(provider)
-            with st.spinner("Generating tailored bullets…"):
-                result = ai_tailor_bullets(
-                    client, model, st.session_state.resume, job["description"]
-                )
-            st.session_state[f"gen_bul_{job_id}"] = result
+        gen_col1, gen_col2 = st.columns(2)
 
-    # Display generated or previously saved content
-    sum_key = f"gen_sum_{job_id}"
-    bul_key = f"gen_bul_{job_id}"
+        with gen_col1:
+            if st.button(
+                "✍️ Generate Summary", type="primary", key="btn_gen_summary"
+            ):
+                client = safe_get_client(provider)
+                with st.spinner("Generating tailored summary…"):
+                    result = ai_tailor_summary(
+                        client, model, st.session_state.resume, job["description"]
+                    )
+                st.session_state[f"gen_sum_{job_id}"] = result
 
-    sum_text = st.session_state.get(sum_key, job.get("tailored_summary", ""))
-    bul_text = st.session_state.get(bul_key, job.get("tailored_bullets", ""))
+        with gen_col2:
+            if st.button(
+                "📋 Generate Bullets", type="primary", key="btn_gen_bullets"
+            ):
+                client = safe_get_client(provider)
+                with st.spinner("Generating tailored bullets…"):
+                    result = ai_tailor_bullets(
+                        client, model, st.session_state.resume, job["description"]
+                    )
+                st.session_state[f"gen_bul_{job_id}"] = result
 
-    edited_sum = ""
-    edited_bul = ""
+        sum_key = f"gen_sum_{job_id}"
+        bul_key = f"gen_bul_{job_id}"
 
-    if sum_text:
-        st.subheader("📝 Tailored Summary")
-        edited_sum = st.text_area(
-            "Edit summary if needed:",
-            value=sum_text,
-            height=150,
-            key=f"edit_sum_{job_id}",
+        sum_text = st.session_state.get(sum_key, job.get("tailored_summary", ""))
+        bul_text = st.session_state.get(bul_key, job.get("tailored_bullets", ""))
+
+        edited_sum = ""
+        edited_bul = ""
+
+        if sum_text:
+            st.markdown("**Tailored Summary:**")
+            edited_sum = st.text_area(
+                "Edit summary if needed:",
+                value=sum_text,
+                height=150,
+                key=f"edit_sum_{job_id}",
+            )
+            st.code(edited_sum, language=None)
+            st.caption("👆 Select and copy the text above")
+
+        if bul_text:
+            st.markdown("**Tailored Bullet Points:**")
+            edited_bul = st.text_area(
+                "Edit bullets if needed:",
+                value=bul_text,
+                height=200,
+                key=f"edit_bul_{job_id}",
+            )
+            st.code(edited_bul, language=None)
+            st.caption("👆 Select and copy the text above")
+
+        if edited_sum or edited_bul:
+            if st.button(
+                "💾 Save Resume Content", key="btn_save_tailored"
+            ):
+                db_update_tailored(job_id, edited_sum, edited_bul)
+                st.success("✅ Saved!")
+                if sum_key in st.session_state:
+                    del st.session_state[sum_key]
+                if bul_key in st.session_state:
+                    del st.session_state[bul_key]
+                st.rerun()
+        elif not sum_text and not bul_text:
+            st.info("Click a generate button above to create tailored resume content.")
+
+    # ──────────────────────────────────────
+    # SUB-TAB: Cover Letter
+    # ──────────────────────────────────────
+    with mat_cover:
+        st.subheader("✉️ Cover Letter")
+
+        cover_tone = st.selectbox(
+            "Tone:",
+            ["Professional", "Conversational", "Enthusiastic", "Formal"],
+            key="cover_tone",
         )
 
-    if bul_text:
-        st.subheader("📋 Tailored Bullet Points")
-        edited_bul = st.text_area(
-            "Edit bullets if needed:",
-            value=bul_text,
-            height=200,
-            key=f"edit_bul_{job_id}",
-        )
+        if st.button("✉️ Generate Cover Letter", type="primary", key="btn_gen_cover"):
+            client = safe_get_client(provider)
+            with st.spinner("Writing cover letter…"):
+                result = ai_generate_cover_letter(
+                    client, model, st.session_state.resume,
+                    job["description"], job["company"], job["title"], cover_tone
+                )
+            st.session_state[f"gen_cover_{job_id}"] = result
 
-    # Save tailored content
-    if edited_sum or edited_bul:
-        if st.button(
-            "💾 Save Tailored Content to Database", key="btn_save_tailored"
-        ):
-            db_update_tailored(job_id, edited_sum, edited_bul)
-            st.success("✅ Tailored content saved!")
-            if sum_key in st.session_state:
-                del st.session_state[sum_key]
-            if bul_key in st.session_state:
-                del st.session_state[bul_key]
-            st.rerun()
-    elif not sum_text and not bul_text:
-        st.info(
-            "Click **Generate Summary** or **Generate Bullets** above to "
-            "create tailored resume content for this job."
+        cover_key = f"gen_cover_{job_id}"
+        cover_text = st.session_state.get(cover_key, "")
+
+        if cover_text:
+            edited_cover = st.text_area(
+                "Edit cover letter:",
+                value=cover_text,
+                height=350,
+                key=f"edit_cover_{job_id}",
+            )
+            st.code(edited_cover, language=None)
+            st.caption("👆 Select and copy the text above")
+
+            # Download button
+            st.download_button(
+                "⬇️ Download as .txt",
+                data=edited_cover,
+                file_name=f"cover_letter_{job['company']}_{job['title']}.txt".replace(" ", "_"),
+                mime="text/plain",
+                key=f"dl_cover_{job_id}",
+            )
+        else:
+            st.info("Click the button above to generate a cover letter for this job.")
+
+    # ──────────────────────────────────────
+    # SUB-TAB: Skills Analysis
+    # ──────────────────────────────────────
+    with mat_skills:
+        st.subheader("🔍 Skills Gap Analysis")
+
+        if st.button("🔍 Analyze Skills Match", type="primary", key="btn_gen_skills"):
+            client = safe_get_client(provider)
+            with st.spinner("Analyzing skills…"):
+                result = ai_skills_analysis(
+                    client, model, st.session_state.resume, job["description"]
+                )
+            st.session_state[f"gen_skills_{job_id}"] = result
+
+        skills_key = f"gen_skills_{job_id}"
+        skills_text = st.session_state.get(skills_key, "")
+
+        if skills_text:
+            st.markdown(skills_text)
+        else:
+            st.info(
+                "Click the button above to see which skills you match, "
+                "partially match, and are missing — plus suggestions for "
+                "addressing gaps in your application."
+            )
+
+    # ──────────────────────────────────────
+    # SUB-TAB: Interview Prep
+    # ──────────────────────────────────────
+    with mat_interview:
+        st.subheader("🎤 Interview Prep")
+
+        if st.button("🎤 Generate Interview Prep", type="primary", key="btn_gen_interview"):
+            client = safe_get_client(provider)
+            with st.spinner("Preparing interview questions…"):
+                result = ai_interview_prep(
+                    client, model, st.session_state.resume, job["description"],
+                    job["title"], job["company"]
+                )
+            st.session_state[f"gen_interview_{job_id}"] = result
+
+        interview_key = f"gen_interview_{job_id}"
+        interview_text = st.session_state.get(interview_key, "")
+
+        if interview_text:
+            st.markdown(interview_text)
+
+            st.download_button(
+                "⬇️ Download Interview Prep as .txt",
+                data=interview_text,
+                file_name=f"interview_prep_{job['company']}_{job['title']}.txt".replace(" ", "_"),
+                mime="text/plain",
+                key=f"dl_interview_{job_id}",
+            )
+        else:
+            st.info(
+                "Click the button above to generate likely interview questions, "
+                "suggested talking points from your experience, and preparation tips."
+            )
+
+    # ──────────────────────────────────────
+    # Download ALL materials
+    # ──────────────────────────────────────
+    st.divider()
+    st.subheader("📦 Export All Materials")
+
+    # Gather everything available
+    all_materials = []
+    all_materials.append(f"JOB: {job['title']} at {job['company']}")
+    all_materials.append(f"SCORE: {job['score']}/100")
+    all_materials.append(f"URL: {job.get('url', 'N/A')}")
+    all_materials.append(f"STATUS: {job['status']}")
+    all_materials.append("")
+
+    has_any = False
+
+    s = st.session_state.get(f"gen_sum_{job_id}", job.get("tailored_summary", ""))
+    if s:
+        all_materials.append("=" * 50)
+        all_materials.append("TAILORED SUMMARY")
+        all_materials.append("=" * 50)
+        all_materials.append(s)
+        all_materials.append("")
+        has_any = True
+
+    b = st.session_state.get(f"gen_bul_{job_id}", job.get("tailored_bullets", ""))
+    if b:
+        all_materials.append("=" * 50)
+        all_materials.append("TAILORED BULLET POINTS")
+        all_materials.append("=" * 50)
+        all_materials.append(b)
+        all_materials.append("")
+        has_any = True
+
+    c = st.session_state.get(f"gen_cover_{job_id}", "")
+    if c:
+        all_materials.append("=" * 50)
+        all_materials.append("COVER LETTER")
+        all_materials.append("=" * 50)
+        all_materials.append(c)
+        all_materials.append("")
+        has_any = True
+
+    sk = st.session_state.get(f"gen_skills_{job_id}", "")
+    if sk:
+        all_materials.append("=" * 50)
+        all_materials.append("SKILLS ANALYSIS")
+        all_materials.append("=" * 50)
+        all_materials.append(sk)
+        all_materials.append("")
+        has_any = True
+
+    iv = st.session_state.get(f"gen_interview_{job_id}", "")
+    if iv:
+        all_materials.append("=" * 50)
+        all_materials.append("INTERVIEW PREP")
+        all_materials.append("=" * 50)
+        all_materials.append(iv)
+        all_materials.append("")
+        has_any = True
+
+    if has_any:
+        combined = "\n".join(all_materials)
+        st.download_button(
+            "📦 Download All Materials (.txt)",
+            data=combined,
+            file_name=f"jobops_{job['company']}_{job['title']}_all_materials.txt".replace(" ", "_"),
+            mime="text/plain",
+            key="dl_all_materials",
+        )
+    else:
+        st.caption(
+            "Generate some materials using the tabs above, then download "
+            "everything here in one file."
         )
