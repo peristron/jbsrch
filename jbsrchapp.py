@@ -7,6 +7,7 @@ import streamlit as st
 import requests
 import sqlite3
 import re
+import io
 from datetime import datetime
 from openai import OpenAI
 
@@ -63,6 +64,60 @@ COUNTRY_CODES = {
 STATUS_OPTIONS = [
     "New", "Applied", "Interviewing", "Offer", "Rejected", "Withdrawn"
 ]
+
+
+# ╔══════════════════════════════════════════════════════════════╗
+# ║  FILE PARSING (TXT, PDF, DOCX)                              ║
+# ╚══════════════════════════════════════════════════════════════╝
+
+def parse_uploaded_file(uploaded_file) -> tuple[str, str | None]:
+    """
+    Parse an uploaded file and return (text_content, error_or_None).
+    Supports .txt, .pdf, and .docx formats.
+    """
+    filename = uploaded_file.name.lower()
+
+    try:
+        if filename.endswith(".txt"):
+            return uploaded_file.read().decode("utf-8"), None
+
+        elif filename.endswith(".pdf"):
+            import pdfplumber
+
+            text_parts = []
+            with pdfplumber.open(io.BytesIO(uploaded_file.read())) as pdf:
+                for page in pdf.pages:
+                    page_text = page.extract_text()
+                    if page_text:
+                        text_parts.append(page_text)
+
+            if not text_parts:
+                return "", "PDF appears to be empty or image-based (no extractable text)."
+
+            return "\n\n".join(text_parts), None
+
+        elif filename.endswith(".docx"):
+            from docx import Document
+
+            doc = Document(io.BytesIO(uploaded_file.read()))
+            paragraphs = [p.text for p in doc.paragraphs if p.text.strip()]
+
+            if not paragraphs:
+                return "", "Word document appears to be empty."
+
+            return "\n\n".join(paragraphs), None
+
+        else:
+            return "", f"Unsupported file type: {filename}. Use .txt, .pdf, or .docx"
+
+    except ImportError as e:
+        missing = "pdfplumber" if "pdfplumber" in str(e) else "python-docx"
+        return "", (
+            f"Missing library: {missing}. "
+            f"Install it with: pip install {missing}"
+        )
+    except Exception as e:
+        return "", f"Error reading file: {e}"
 
 
 # ╔══════════════════════════════════════════════════════════════╗
@@ -230,7 +285,7 @@ def db_job_exists(title: str, company: str, url: str) -> bool:
 
 
 # ╔══════════════════════════════════════════════════════════════╗
-# ║  JOB SCRAPERS / SOURCES                                     ║
+# ║  JOB SEARCH (Adzuna API)                                    ║
 # ╚══════════════════════════════════════════════════════════════╝
 
 def search_adzuna(
@@ -241,7 +296,6 @@ def search_adzuna(
     """
     Search via Adzuna API (free tier, 250 requests/month).
     Returns (list_of_job_dicts, error_string_or_None).
-    Register: https://developer.adzuna.com/
     """
     app_id = get_api_key("ADZUNA_APP_ID")
     app_key = get_api_key("ADZUNA_APP_KEY")
@@ -538,13 +592,19 @@ with st.sidebar:
         st.session_state.resume = resume_input
 
     uploaded = st.file_uploader(
-        "Or upload a .txt file",
-        type=["txt"],
+        "Or upload a file",
+        type=["txt", "pdf", "docx"],
         key="resume_upload",
+        help="Supported formats: .txt, .pdf, .docx",
     )
     if uploaded:
-        st.session_state.resume = uploaded.read().decode("utf-8")
-        st.rerun()
+        text, err = parse_uploaded_file(uploaded)
+        if err:
+            st.error(err)
+        elif text:
+            st.session_state.resume = text
+            st.success(f"✅ Loaded from {uploaded.name}")
+            st.rerun()
 
     if st.session_state.resume:
         word_count = len(st.session_state.resume.split())
@@ -554,7 +614,7 @@ with st.sidebar:
 
 
 # ╔══════════════════════════════════════════════════════════════╗
-# ║  MAIN TITLE                                                  ║
+# ║  MAIN TITLE & HOW-TO GUIDE                                  ║
 # ╚══════════════════════════════════════════════════════════════╝
 
 st.title("💼 JobOps — AI Job Scorer & Resume Tailorer")
@@ -562,6 +622,64 @@ st.caption(
     f"Using **{provider}** / `{model}`  •  "
     f"Resume: {'✅ loaded' if st.session_state.resume else '❌ not loaded'}"
 )
+
+# ── Collapsible How-To Guide ──
+with st.expander("📖 How to Use This Application", expanded=False):
+    st.markdown("""
+    ### Quick Start
+
+    **1. Load Your Resume** (Sidebar → left panel)
+    - Paste your resume text into the text box, **OR**
+    - Upload a file (.txt, .pdf, or .docx)
+    - Your resume stays loaded across all tabs during your session
+
+    **2. Choose Your AI** (Sidebar → top)
+    - Pick a provider: OpenAI, xAI (Grok), or DeepSeek
+    - Select a model from the dropdown
+    - Make sure the corresponding API key shows ✅
+
+    ---
+
+    ### Tab Guide
+
+    | Tab | What to do |
+    |---|---|
+    | **🔍 API Search** | Enter job keywords + country → search Adzuna → AI scores every result against your resume |
+    | **📋 Paste Job** | Found a job on LinkedIn, Indeed, etc.? Paste the title + description here → get an instant fit score |
+    | **📊 Search Results** | Review your scored search results → save the good ones to your database |
+    | **💾 Saved Jobs** | Your persistent job tracker — update application status (New → Applied → Interview → Offer/Rejected), add notes |
+    | **✂️ Tailor Resume** | Pick any saved job → generate a tailored professional summary + bullet points → edit → save |
+
+    ---
+
+    ### Scoring Guide
+
+    | Color | Score | Meaning |
+    |---|---|---|
+    | 🟢 | 70–100 | Strong match — worth applying |
+    | 🟡 | 40–69 | Partial match — review carefully |
+    | 🔴 | 0–39 | Weak match — likely not a fit |
+
+    ---
+
+    ### Tips
+    - **Better resume = better scores.** Include specific skills, tools, years of experience, and achievements
+    - **Use Paste Job tab** for jobs from sites like LinkedIn or Indeed — just copy the full job description
+    - **Tailor before applying** — use the Tailor tab to generate a custom summary and bullet points for each job
+    - **Track everything** — update statuses in Saved Jobs so you never lose track of where you applied
+    - **Try different models** — some score differently; compare if you're unsure about a result
+
+    ---
+
+    ### Troubleshooting
+
+    | Problem | Fix |
+    |---|---|
+    | "API key not found" | Add your key to `.streamlit/secrets.toml` |
+    | Search returns no results | Try broader keywords or a different country code |
+    | PDF upload shows no text | Your PDF may be image-based (scanned) — paste the text manually instead |
+    | Scores seem off | Try a different model, or add more detail to your resume |
+    """)
 
 
 # ╔══════════════════════════════════════════════════════════════╗
