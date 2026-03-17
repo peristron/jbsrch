@@ -641,13 +641,22 @@ with st.sidebar:
         help="Supported: .txt, .pdf, .docx  •  .doc and .odt will show conversion instructions",
     )
     if uploaded:
-        text, err = parse_uploaded_file(uploaded)
-        if err:
-            st.error(err)
-        elif text:
-            st.session_state.resume = text
-            st.success(f"✅ Loaded {len(text.split())} words from {uploaded.name}")
-            st.rerun()
+        # Track file identity to avoid reprocessing on reruns
+        file_id = f"{uploaded.name}_{uploaded.size}"
+
+        if st.session_state.get("last_uploaded_file") != file_id:
+            text, err = parse_uploaded_file(uploaded)
+            if err:
+                st.error(err)
+                st.session_state.last_uploaded_file = file_id
+            elif text:
+                st.session_state.resume = text
+                st.session_state.last_uploaded_file = file_id
+                st.success(f"✅ Loaded {len(text.split())} words from {uploaded.name}")
+                st.rerun()
+            else:
+                st.warning("File appeared empty. Try pasting your resume text instead.")
+                st.session_state.last_uploaded_file = file_id
 
     if st.session_state.resume:
         word_count = len(st.session_state.resume.split())
